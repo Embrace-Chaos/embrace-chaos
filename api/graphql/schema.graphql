@@ -1,0 +1,897 @@
+# Embrace Chaos GraphQL Schema
+# This schema provides a rich, type-safe API for the chaos engineering platform
+
+scalar Time
+scalar Duration
+scalar Map
+scalar UUID
+
+# Root Query type
+type Query {
+  # Experiment queries
+  experiment(id: ID!): Experiment
+  experiments(
+    filter: ExperimentFilter
+    pagination: PaginationInput
+  ): ExperimentConnection!
+  
+  # Execution queries
+  execution(id: ID!): Execution
+  executions(
+    filter: ExecutionFilter
+    pagination: PaginationInput
+  ): ExecutionConnection!
+  
+  # Target queries
+  target(id: ID!): Target
+  targets(
+    filter: TargetFilter
+    pagination: PaginationInput
+  ): TargetConnection!
+  
+  # Discovery queries
+  discoverTargets(input: DiscoverTargetsInput!): [Target!]!
+  
+  # Health queries
+  health: HealthStatus!
+  
+  # User and organization queries
+  me: User!
+  organization(id: ID!): Organization
+  
+  # Search across all resources
+  search(query: String!, types: [SearchType!]): SearchResults!
+}
+
+# Root Mutation type
+type Mutation {
+  # Experiment mutations
+  createExperiment(input: CreateExperimentInput!): ExperimentPayload!
+  updateExperiment(id: ID!, input: UpdateExperimentInput!): ExperimentPayload!
+  deleteExperiment(id: ID!): DeletePayload!
+  cloneExperiment(id: ID!, input: CloneExperimentInput!): ExperimentPayload!
+  
+  # Execution mutations
+  executeExperiment(id: ID!, input: ExecuteExperimentInput): ExecutionPayload!
+  cancelExecution(id: ID!): ExecutionPayload!
+  retryExecution(id: ID!): ExecutionPayload!
+  
+  # Target mutations
+  refreshTarget(id: ID!): TargetPayload!
+  validateTarget(id: ID!): ValidationPayload!
+  
+  # GitOps mutations
+  syncFromGitHub(input: GitHubSyncInput!): SyncPayload!
+  createPullRequest(input: CreatePRInput!): PullRequestPayload!
+  
+  # Schedule mutations
+  scheduleExperiment(id: ID!, input: ScheduleInput!): SchedulePayload!
+  unscheduleExperiment(id: ID!): DeletePayload!
+}
+
+# Root Subscription type
+type Subscription {
+  # Real-time execution updates
+  executionUpdated(id: ID!): ExecutionUpdate!
+  executionLogs(id: ID!, tail: Int): LogEntry!
+  
+  # Real-time experiment changes
+  experimentChanged(id: ID!): ExperimentUpdate!
+  
+  # Real-time safety alerts
+  safetyAlert(experimentId: ID): SafetyAlert!
+  
+  # Organization-wide events
+  organizationEvents(organizationId: ID!): OrganizationEvent!
+}
+
+# Core domain types
+
+type Experiment {
+  id: ID!
+  name: String!
+  description: String
+  status: ExperimentStatus!
+  config: ExperimentConfig!
+  safety: SafetyConfig!
+  targets: [Target!]!
+  labels: Map
+  metadata: Map
+  
+  # Relationships
+  executions(
+    filter: ExecutionFilter
+    pagination: PaginationInput
+  ): ExecutionConnection!
+  
+  schedule: Schedule
+  lastExecution: Execution
+  creator: User!
+  organization: Organization!
+  
+  # Computed fields
+  successRate: Float!
+  averageDuration: Duration!
+  nextScheduledRun: Time
+  isScheduled: Boolean!
+  canExecute: Boolean!
+  validationStatus: ValidationStatus!
+  
+  # Timestamps
+  createdAt: Time!
+  updatedAt: Time!
+  version: Int!
+}
+
+type ExperimentConfig {
+  duration: Duration!
+  parallelism: Int!
+  concurrencyMode: ConcurrencyMode!
+  timeout: Duration
+  retryPolicy: RetryPolicy
+  parameters: [Parameter!]!
+}
+
+type SafetyConfig {
+  maxFailures: Int!
+  failureThreshold: Float!
+  autoRollback: Boolean!
+  rollbackTimeout: Duration!
+  preflightChecks: [String!]!
+  healthChecks: [String!]!
+  monitoringPeriod: Duration!
+  alertThresholds: Map!
+  steadyStateHypothesis: SteadyStateHypothesis
+}
+
+type SteadyStateHypothesis {
+  metrics: [MetricCheck!]!
+  probes: [Probe!]!
+}
+
+type MetricCheck {
+  name: String!
+  query: String!
+  threshold: Float!
+  operator: ComparisonOperator!
+}
+
+type Probe {
+  name: String!
+  type: ProbeType!
+  endpoint: String!
+  expectedStatus: Int
+  timeout: Duration!
+}
+
+type Target {
+  id: ID!
+  resourceId: String!
+  name: String!
+  type: TargetType!
+  provider: Provider!
+  region: String!
+  tags: Map!
+  status: TargetStatus!
+  metadata: Map!
+  
+  # Relationships
+  experiments: [Experiment!]!
+  
+  # Health and validation
+  healthStatus: HealthCheck!
+  lastValidated: Time
+  
+  # Timestamps
+  createdAt: Time!
+  updatedAt: Time!
+}
+
+type Execution {
+  id: ID!
+  experiment: Experiment!
+  status: ExecutionStatus!
+  startedAt: Time!
+  completedAt: Time
+  duration: Duration
+  triggerType: TriggerType!
+  triggeredBy: String!
+  parameters: Map
+  metadata: Map
+  
+  # Results and metrics
+  results: [Result!]!
+  metrics: ExecutionMetrics!
+  
+  # Logs and events
+  logs(tail: Int, follow: Boolean): [LogEntry!]!
+  events: [ExecutionEvent!]!
+  
+  # Safety and rollback
+  safetyStatus: SafetyStatus!
+  rollbackStatus: RollbackStatus
+  
+  # Timestamps
+  createdAt: Time!
+  updatedAt: Time!
+  version: Int!
+}
+
+type Result {
+  id: ID!
+  target: Target!
+  status: ResultStatus!
+  startedAt: Time!
+  completedAt: Time
+  error: String
+  output: Map
+  metrics: Map
+}
+
+type ExecutionMetrics {
+  targetsAffected: Int!
+  successCount: Int!
+  failureCount: Int!
+  rollbackCount: Int!
+  totalDuration: Duration!
+  avgTargetDuration: Duration!
+}
+
+type User {
+  id: ID!
+  email: String!
+  name: String!
+  role: UserRole!
+  organizations: [Organization!]!
+  experiments: [Experiment!]!
+  preferences: UserPreferences!
+  createdAt: Time!
+}
+
+type Organization {
+  id: ID!
+  name: String!
+  slug: String!
+  users: [User!]!
+  experiments: [Experiment!]!
+  quotas: OrganizationQuotas!
+  settings: OrganizationSettings!
+  createdAt: Time!
+}
+
+# Input types
+
+input CreateExperimentInput {
+  name: String!
+  description: String
+  config: ExperimentConfigInput!
+  safety: SafetyConfigInput!
+  targets: [TargetInput!]!
+  labels: Map
+  metadata: Map
+}
+
+input UpdateExperimentInput {
+  name: String
+  description: String
+  config: ExperimentConfigInput
+  safety: SafetyConfigInput
+  targets: [TargetInput!]
+  labels: Map
+  metadata: Map
+}
+
+input ExperimentConfigInput {
+  duration: Duration!
+  parallelism: Int!
+  concurrencyMode: ConcurrencyMode
+  timeout: Duration
+  retryPolicy: RetryPolicyInput
+  parameters: [ParameterInput!]
+}
+
+input SafetyConfigInput {
+  maxFailures: Int
+  failureThreshold: Float
+  autoRollback: Boolean
+  rollbackTimeout: Duration
+  preflightChecks: [String!]
+  healthChecks: [String!]
+  monitoringPeriod: Duration
+  alertThresholds: Map
+}
+
+input TargetInput {
+  id: ID
+  resourceId: String!
+  name: String!
+  type: TargetType!
+  provider: Provider!
+  region: String!
+  tags: Map
+}
+
+input ExecuteExperimentInput {
+  dryRun: Boolean
+  parameters: Map
+  skipPreflightChecks: Boolean
+  notificationChannels: [String!]
+}
+
+input ExperimentFilter {
+  status: [ExperimentStatus!]
+  createdBy: [ID!]
+  labels: Map
+  nameContains: String
+  hasSchedule: Boolean
+  providers: [Provider!]
+  targetTypes: [TargetType!]
+}
+
+input ExecutionFilter {
+  experimentId: ID
+  status: [ExecutionStatus!]
+  triggerType: [TriggerType!]
+  startedAfter: Time
+  startedBefore: Time
+  durationGreaterThan: Duration
+  durationLessThan: Duration
+}
+
+input TargetFilter {
+  providers: [Provider!]
+  types: [TargetType!]
+  regions: [String!]
+  tags: Map
+  status: [TargetStatus!]
+}
+
+input PaginationInput {
+  page: Int
+  pageSize: Int
+  orderBy: String
+  orderDirection: OrderDirection
+}
+
+# Connection types for pagination
+
+type ExperimentConnection {
+  edges: [ExperimentEdge!]!
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+type ExperimentEdge {
+  cursor: String!
+  node: Experiment!
+}
+
+type ExecutionConnection {
+  edges: [ExecutionEdge!]!
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+type ExecutionEdge {
+  cursor: String!
+  node: Execution!
+}
+
+type TargetConnection {
+  edges: [TargetEdge!]!
+  pageInfo: PageInfo!
+  totalCount: Int!
+}
+
+type TargetEdge {
+  cursor: String!
+  node: Target!
+}
+
+type PageInfo {
+  hasNextPage: Boolean!
+  hasPreviousPage: Boolean!
+  startCursor: String
+  endCursor: String
+}
+
+# Payload types for mutations
+
+type ExperimentPayload {
+  experiment: Experiment
+  errors: [Error!]!
+  userErrors: [UserError!]!
+}
+
+type ExecutionPayload {
+  execution: Execution
+  errors: [Error!]!
+  userErrors: [UserError!]!
+}
+
+type TargetPayload {
+  target: Target
+  errors: [Error!]!
+  userErrors: [UserError!]!
+}
+
+type DeletePayload {
+  success: Boolean!
+  errors: [Error!]!
+  userErrors: [UserError!]!
+}
+
+type ValidationPayload {
+  valid: Boolean!
+  errors: [String!]!
+  warnings: [String!]!
+}
+
+type Error {
+  message: String!
+  code: String!
+  path: [String!]
+}
+
+type UserError {
+  message: String!
+  field: [String!]
+  code: String!
+}
+
+# Enums
+
+enum ExperimentStatus {
+  DRAFT
+  READY
+  SCHEDULED
+  RUNNING
+  COMPLETED
+  FAILED
+  ARCHIVED
+}
+
+enum ExecutionStatus {
+  PENDING
+  RUNNING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+  TIMEOUT
+}
+
+enum TargetStatus {
+  ACTIVE
+  INACTIVE
+  UNKNOWN
+}
+
+enum ResultStatus {
+  PENDING
+  RUNNING
+  SUCCESS
+  FAILED
+  SKIPPED
+  ROLLBACK
+}
+
+enum Provider {
+  AWS
+  GCP
+  AZURE
+  KUBERNETES
+  VMWARE
+}
+
+enum TargetType {
+  EC2_INSTANCE
+  ECS_SERVICE
+  RDS_INSTANCE
+  LAMBDA_FUNCTION
+  GCE_INSTANCE
+  CLOUDSQL_INSTANCE
+  GKE_NODE
+  AZURE_VM
+  AKS_NODE
+}
+
+enum TriggerType {
+  MANUAL
+  SCHEDULED
+  API
+  WEBHOOK
+  GITOPS
+}
+
+enum ConcurrencyMode {
+  SEQUENTIAL
+  PARALLEL
+  PIPELINE
+}
+
+enum UserRole {
+  ADMIN
+  OPERATOR
+  VIEWER
+}
+
+enum OrderDirection {
+  ASC
+  DESC
+}
+
+enum SearchType {
+  EXPERIMENT
+  EXECUTION
+  TARGET
+  USER
+}
+
+enum ProbeType {
+  HTTP
+  TCP
+  COMMAND
+  PROMETHEUS
+}
+
+enum ComparisonOperator {
+  EQUALS
+  NOT_EQUALS
+  GREATER_THAN
+  LESS_THAN
+  GREATER_THAN_OR_EQUAL
+  LESS_THAN_OR_EQUAL
+}
+
+# Additional types for real-time updates
+
+type ExecutionUpdate {
+  id: ID!
+  status: ExecutionStatus!
+  progress: Float!
+  currentPhase: String!
+  message: String
+  metrics: ExecutionMetrics!
+  timestamp: Time!
+}
+
+type ExperimentUpdate {
+  id: ID!
+  changeType: ChangeType!
+  field: String!
+  oldValue: String
+  newValue: String
+  changedBy: User!
+  timestamp: Time!
+}
+
+type SafetyAlert {
+  id: ID!
+  severity: AlertSeverity!
+  experimentId: ID!
+  executionId: ID!
+  metric: String!
+  threshold: Float!
+  actualValue: Float!
+  message: String!
+  timestamp: Time!
+}
+
+type LogEntry {
+  timestamp: Time!
+  level: LogLevel!
+  message: String!
+  source: String!
+  metadata: Map
+}
+
+enum ChangeType {
+  CREATED
+  UPDATED
+  DELETED
+  EXECUTED
+  SCHEDULED
+  UNSCHEDULED
+}
+
+enum AlertSeverity {
+  INFO
+  WARNING
+  ERROR
+  CRITICAL
+}
+
+enum LogLevel {
+  DEBUG
+  INFO
+  WARN
+  ERROR
+}
+
+# Complex types for advanced features
+
+type Schedule {
+  id: ID!
+  experiment: Experiment!
+  cronExpression: String!
+  timezone: String!
+  enabled: Boolean!
+  nextRun: Time!
+  lastRun: Time
+  metadata: Map
+}
+
+type RetryPolicy {
+  maxRetries: Int!
+  backoffStrategy: BackoffStrategy!
+  initialDelay: Duration!
+  maxDelay: Duration!
+}
+
+enum BackoffStrategy {
+  FIXED
+  EXPONENTIAL
+  LINEAR
+}
+
+type Parameter {
+  name: String!
+  type: ParameterType!
+  required: Boolean!
+  defaultValue: String
+  description: String
+  validation: String
+}
+
+enum ParameterType {
+  STRING
+  INTEGER
+  FLOAT
+  BOOLEAN
+  DURATION
+  JSON
+}
+
+# Search results
+type SearchResults {
+  experiments: [Experiment!]!
+  executions: [Execution!]!
+  targets: [Target!]!
+  users: [User!]!
+  totalCount: Int!
+}
+
+# Health and monitoring
+type HealthStatus {
+  status: ServiceStatus!
+  version: String!
+  uptime: Duration!
+  checks: [HealthCheck!]!
+}
+
+type HealthCheck {
+  name: String!
+  status: ServiceStatus!
+  message: String
+  duration: Duration!
+  lastChecked: Time!
+}
+
+enum ServiceStatus {
+  HEALTHY
+  DEGRADED
+  UNHEALTHY
+}
+
+# Organization types
+type OrganizationQuotas {
+  maxExperiments: Int!
+  maxExecutionsPerMonth: Int!
+  maxTargets: Int!
+  maxUsers: Int!
+  currentUsage: QuotaUsage!
+}
+
+type QuotaUsage {
+  experiments: Int!
+  executionsThisMonth: Int!
+  targets: Int!
+  users: Int!
+}
+
+type OrganizationSettings {
+  requireApproval: Boolean!
+  allowedProviders: [Provider!]!
+  defaultSafetyConfig: SafetyConfig!
+  webhookUrl: String
+  slackChannel: String
+}
+
+type UserPreferences {
+  theme: Theme!
+  notifications: NotificationPreferences!
+  defaultView: DefaultView!
+}
+
+type NotificationPreferences {
+  email: Boolean!
+  slack: Boolean!
+  webhook: Boolean!
+  executionUpdates: Boolean!
+  safetyAlerts: Boolean!
+}
+
+enum Theme {
+  LIGHT
+  DARK
+  AUTO
+}
+
+enum DefaultView {
+  EXPERIMENTS
+  EXECUTIONS
+  TARGETS
+  DASHBOARD
+}
+
+# Events
+type OrganizationEvent {
+  id: ID!
+  type: EventType!
+  actor: User!
+  resource: String!
+  resourceId: ID!
+  action: String!
+  metadata: Map
+  timestamp: Time!
+}
+
+enum EventType {
+  AUDIT
+  SAFETY
+  QUOTA
+  SYSTEM
+}
+
+# GitOps types
+input GitHubSyncInput {
+  repository: String!
+  branch: String!
+  path: String
+  dryRun: Boolean
+}
+
+type SyncPayload {
+  syncedExperiments: [Experiment!]!
+  errors: [Error!]!
+  totalProcessed: Int!
+  created: Int!
+  updated: Int!
+  failed: Int!
+}
+
+input CreatePRInput {
+  repository: String!
+  title: String!
+  body: String!
+  experimentId: ID!
+  baseBranch: String
+}
+
+type PullRequestPayload {
+  pullRequestUrl: String
+  number: Int!
+  errors: [Error!]!
+}
+
+# Additional input types
+input CloneExperimentInput {
+  name: String!
+  description: String
+}
+
+input ScheduleInput {
+  cronExpression: String!
+  timezone: String
+  enabled: Boolean
+  parameters: Map
+}
+
+input RetryPolicyInput {
+  maxRetries: Int
+  backoffStrategy: BackoffStrategy
+  initialDelay: Duration
+  maxDelay: Duration
+}
+
+input ParameterInput {
+  name: String!
+  type: ParameterType!
+  required: Boolean
+  defaultValue: String
+  description: String
+  validation: String
+}
+
+input DiscoverTargetsInput {
+  provider: Provider!
+  region: String
+  filters: Map
+}
+
+# Rollback types
+type RollbackStatus {
+  required: Boolean!
+  initiated: Boolean!
+  completed: Boolean!
+  startedAt: Time
+  completedAt: Time
+  reason: String
+  results: [RollbackResult!]!
+}
+
+type RollbackResult {
+  target: Target!
+  status: ResultStatus!
+  message: String
+  completedAt: Time!
+}
+
+# Safety types
+type SafetyStatus {
+  preflightPassed: Boolean!
+  monitoringActive: Boolean!
+  thresholdsExceeded: Boolean!
+  violations: [SafetyViolation!]!
+}
+
+type SafetyViolation {
+  metric: String!
+  threshold: Float!
+  actualValue: Float!
+  timestamp: Time!
+  severity: AlertSeverity!
+}
+
+# Execution event types
+type ExecutionEvent {
+  id: ID!
+  type: ExecutionEventType!
+  phase: String!
+  message: String!
+  metadata: Map
+  timestamp: Time!
+}
+
+enum ExecutionEventType {
+  STARTED
+  PHASE_STARTED
+  PHASE_COMPLETED
+  TARGET_STARTED
+  TARGET_COMPLETED
+  SAFETY_CHECK
+  ROLLBACK_INITIATED
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+# Validation types
+type ValidationStatus {
+  valid: Boolean!
+  lastValidated: Time
+  errors: [ValidationError!]!
+  warnings: [ValidationWarning!]!
+}
+
+type ValidationError {
+  field: String!
+  message: String!
+  code: String!
+}
+
+type ValidationWarning {
+  field: String!
+  message: String!
+  code: String!
+}

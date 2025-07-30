@@ -1,0 +1,1116 @@
+openapi: 3.0.3
+info:
+  title: Embrace Chaos API
+  description: |
+    Enterprise-grade chaos engineering platform API for orchestrating chaos experiments 
+    across multi-cloud and on-premises infrastructure.
+    
+    ## Features
+    - Multi-cloud provider support (AWS, GCP, Azure, Kubernetes)
+    - GitOps workflow integration
+    - Real-time safety monitoring
+    - Comprehensive audit logging
+    - Advanced scheduling and automation
+    
+    ## Authentication
+    This API uses Bearer token authentication. Include your token in the Authorization header:
+    ```
+    Authorization: Bearer your-api-token
+    ```
+  version: 1.0.0
+  contact:
+    name: Embrace Chaos API Support
+    url: https://github.com/embrace-chaos/embrace-chaos
+    email: support@embrace-chaos.io
+  license:
+    name: Apache 2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0.html
+
+servers:
+  - url: https://api.embrace-chaos.io/v1
+    description: Production server
+  - url: https://staging-api.embrace-chaos.io/v1
+    description: Staging server
+  - url: http://localhost:8080/v1
+    description: Local development server
+
+paths:
+  # Experiments endpoints
+  /experiments:
+    get:
+      summary: List experiments
+      description: Retrieve a paginated list of chaos experiments with optional filtering
+      operationId: listExperiments
+      tags:
+        - Experiments
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PageSizeParam'
+        - $ref: '#/components/parameters/OrderByParam'
+        - $ref: '#/components/parameters/OrderDirParam'
+        - name: status
+          in: query
+          description: Filter by experiment status
+          schema:
+            type: array
+            items:
+              $ref: '#/components/schemas/ExperimentStatus'
+        - name: created_by
+          in: query
+          description: Filter by creator
+          schema:
+            type: array
+            items:
+              type: string
+        - name: name_contains
+          in: query
+          description: Filter by name containing text
+          schema:
+            type: string
+        - name: labels
+          in: query
+          description: Filter by labels (key:value format)
+          schema:
+            type: object
+            additionalProperties:
+              type: string
+      responses:
+        '200':
+          description: List of experiments
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExperimentListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    post:
+      summary: Create experiment
+      description: Create a new chaos experiment
+      operationId: createExperiment
+      tags:
+        - Experiments
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateExperimentRequest'
+          application/yaml:
+            schema:
+              type: string
+              example: |
+                apiVersion: chaos.embrace.io/v1
+                kind: Experiment
+                name: ec2-instance-failure
+                description: Test EC2 instance failure recovery
+                config:
+                  duration: 5m
+                  parallelism: 1
+                safety:
+                  maxFailures: 1
+                  failureThreshold: 20
+                targets:
+                  - name: web-servers
+                    type: ec2_instance
+                    provider: aws
+      responses:
+        '201':
+          description: Experiment created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Experiment'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /experiments/{experimentId}:
+    get:
+      summary: Get experiment
+      description: Retrieve a specific experiment by ID
+      operationId: getExperiment
+      tags:
+        - Experiments
+      parameters:
+        - $ref: '#/components/parameters/ExperimentIdParam'
+      responses:
+        '200':
+          description: Experiment details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Experiment'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    put:
+      summary: Update experiment
+      description: Update an existing experiment
+      operationId: updateExperiment
+      tags:
+        - Experiments
+      parameters:
+        - $ref: '#/components/parameters/ExperimentIdParam'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateExperimentRequest'
+      responses:
+        '200':
+          description: Experiment updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Experiment'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    delete:
+      summary: Delete experiment
+      description: Soft delete an experiment
+      operationId: deleteExperiment
+      tags:
+        - Experiments
+      parameters:
+        - $ref: '#/components/parameters/ExperimentIdParam'
+      responses:
+        '204':
+          description: Experiment deleted successfully
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /experiments/{experimentId}/execute:
+    post:
+      summary: Execute experiment
+      description: Start execution of a chaos experiment
+      operationId: executeExperiment
+      tags:
+        - Experiments
+      parameters:
+        - $ref: '#/components/parameters/ExperimentIdParam'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExecuteExperimentRequest'
+      responses:
+        '202':
+          description: Experiment execution started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Execution'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /experiments/{experimentId}/validate:
+    post:
+      summary: Validate experiment
+      description: Validate experiment configuration without executing
+      operationId: validateExperiment
+      tags:
+        - Experiments
+      parameters:
+        - $ref: '#/components/parameters/ExperimentIdParam'
+      responses:
+        '200':
+          description: Validation result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationResult'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  # Executions endpoints
+  /executions:
+    get:
+      summary: List executions
+      description: Retrieve a paginated list of experiment executions
+      operationId: listExecutions
+      tags:
+        - Executions
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PageSizeParam'
+        - $ref: '#/components/parameters/OrderByParam'
+        - $ref: '#/components/parameters/OrderDirParam'
+        - name: experiment_id
+          in: query
+          description: Filter by experiment ID
+          schema:
+            type: string
+            format: uuid
+        - name: status
+          in: query
+          description: Filter by execution status
+          schema:
+            type: array
+            items:
+              $ref: '#/components/schemas/ExecutionStatus'
+      responses:
+        '200':
+          description: List of executions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecutionListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /executions/{executionId}:
+    get:
+      summary: Get execution
+      description: Retrieve a specific execution by ID
+      operationId: getExecution
+      tags:
+        - Executions
+      parameters:
+        - $ref: '#/components/parameters/ExecutionIdParam'
+      responses:
+        '200':
+          description: Execution details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Execution'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /executions/{executionId}/cancel:
+    post:
+      summary: Cancel execution
+      description: Cancel a running experiment execution
+      operationId: cancelExecution
+      tags:
+        - Executions
+      parameters:
+        - $ref: '#/components/parameters/ExecutionIdParam'
+      responses:
+        '200':
+          description: Execution cancelled successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Execution'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /executions/{executionId}/logs:
+    get:
+      summary: Get execution logs
+      description: Retrieve logs for a specific execution
+      operationId: getExecutionLogs
+      tags:
+        - Executions
+      parameters:
+        - $ref: '#/components/parameters/ExecutionIdParam'
+        - name: follow
+          in: query
+          description: Follow logs in real-time
+          schema:
+            type: boolean
+            default: false
+        - name: tail
+          in: query
+          description: Number of lines to show from the end
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 10000
+            default: 100
+      responses:
+        '200':
+          description: Execution logs
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LogResponse'
+            text/plain:
+              schema:
+                type: string
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  # Targets endpoints
+  /targets:
+    get:
+      summary: List targets
+      description: Retrieve a list of infrastructure targets
+      operationId: listTargets
+      tags:
+        - Targets
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/PageSizeParam'
+        - name: provider
+          in: query
+          description: Filter by provider
+          schema:
+            type: array
+            items:
+              $ref: '#/components/schemas/Provider'
+        - name: type
+          in: query
+          description: Filter by target type
+          schema:
+            type: array
+            items:
+              $ref: '#/components/schemas/TargetType'
+        - name: region
+          in: query
+          description: Filter by region
+          schema:
+            type: array
+            items:
+              type: string
+      responses:
+        '200':
+          description: List of targets
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TargetListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /targets/discover:
+    post:
+      summary: Discover targets
+      description: Discover infrastructure targets from providers
+      operationId: discoverTargets
+      tags:
+        - Targets
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DiscoverTargetsRequest'
+      responses:
+        '200':
+          description: Discovered targets
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiscoverTargetsResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  # Health check endpoints
+  /health:
+    get:
+      summary: Health check
+      description: Check API health status
+      operationId: healthCheck
+      tags:
+        - Health
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+        '503':
+          description: Service is unhealthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /health/ready:
+    get:
+      summary: Readiness check
+      description: Check if service is ready to serve traffic
+      operationId: readinessCheck
+      tags:
+        - Health
+      responses:
+        '200':
+          description: Service is ready
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadinessResponse'
+        '503':
+          description: Service is not ready
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    ExperimentIdParam:
+      name: experimentId
+      in: path
+      required: true
+      description: Experiment ID
+      schema:
+        type: string
+        format: uuid
+    ExecutionIdParam:
+      name: executionId
+      in: path
+      required: true
+      description: Execution ID
+      schema:
+        type: string
+        format: uuid
+    PageParam:
+      name: page
+      in: query
+      description: Page number (1-based)
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    PageSizeParam:
+      name: page_size
+      in: query
+      description: Number of items per page
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+    OrderByParam:
+      name: order_by
+      in: query
+      description: Field to order by
+      schema:
+        type: string
+        default: created_at
+    OrderDirParam:
+      name: order_dir
+      in: query
+      description: Order direction
+      schema:
+        type: string
+        enum: [asc, desc]
+        default: desc
+
+  schemas:
+    # Core domain schemas
+    Experiment:
+      type: object
+      required:
+        - id
+        - name
+        - status
+        - config
+        - safety
+        - targets
+        - created_at
+        - updated_at
+        - created_by
+        - version
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique experiment identifier
+        name:
+          type: string
+          maxLength: 255
+          description: Experiment name
+        description:
+          type: string
+          description: Experiment description
+        status:
+          $ref: '#/components/schemas/ExperimentStatus'
+        config:
+          $ref: '#/components/schemas/ExperimentConfig'
+        safety:
+          $ref: '#/components/schemas/SafetyConfig'
+        targets:
+          type: array
+          items:
+            $ref: '#/components/schemas/Target'
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+          description: Key-value labels
+        metadata:
+          type: object
+          description: Additional metadata
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        created_by:
+          type: string
+          description: Creator identifier
+        version:
+          type: integer
+          description: Version number
+
+    ExperimentStatus:
+      type: string
+      enum:
+        - draft
+        - ready
+        - scheduled
+        - running
+        - completed
+        - failed
+        - archived
+      description: Experiment status
+
+    ExperimentConfig:
+      type: object
+      required:
+        - duration
+        - parallelism
+      properties:
+        duration:
+          type: string
+          pattern: '^(\d+[smhd])+$'
+          description: Experiment duration (e.g., 5m, 1h)
+        parallelism:
+          type: integer
+          minimum: 1
+          maximum: 100
+          description: Number of parallel executions
+        concurrency_mode:
+          type: string
+          enum: [sequential, parallel, pipeline]
+          default: sequential
+        timeout:
+          type: string
+          pattern: '^(\d+[smhd])+$'
+          description: Execution timeout
+        retry_policy:
+          $ref: '#/components/schemas/RetryPolicy'
+
+    RetryPolicy:
+      type: object
+      properties:
+        max_retries:
+          type: integer
+          minimum: 0
+          maximum: 10
+          default: 0
+        backoff_strategy:
+          type: string
+          enum: [fixed, exponential, linear]
+          default: exponential
+        initial_delay:
+          type: string
+          pattern: '^(\d+[ms])+$'
+          default: 1s
+        max_delay:
+          type: string
+          pattern: '^(\d+[smh])+$'
+          default: 5m
+
+    SafetyConfig:
+      type: object
+      properties:
+        max_failures:
+          type: integer
+          minimum: 0
+          default: 0
+        failure_threshold:
+          type: number
+          minimum: 0
+          maximum: 100
+          default: 10
+        auto_rollback:
+          type: boolean
+          default: true
+        rollback_timeout:
+          type: string
+          pattern: '^(\d+[smh])+$'
+          default: 5m
+        preflight_checks:
+          type: array
+          items:
+            type: string
+        health_checks:
+          type: array
+          items:
+            type: string
+        monitoring_period:
+          type: string
+          pattern: '^(\d+[ms])+$'
+          default: 30s
+        alert_thresholds:
+          type: object
+          additionalProperties:
+            type: number
+
+    Target:
+      type: object
+      required:
+        - id
+        - name
+        - type
+        - provider
+        - status
+      properties:
+        id:
+          type: string
+          description: Target identifier
+        resource_id:
+          type: string
+          description: Provider resource ID
+        name:
+          type: string
+          description: Target name
+        type:
+          $ref: '#/components/schemas/TargetType'
+        provider:
+          $ref: '#/components/schemas/Provider'
+        region:
+          type: string
+          description: Target region
+        tags:
+          type: object
+          additionalProperties:
+            type: string
+        status:
+          $ref: '#/components/schemas/TargetStatus'
+        metadata:
+          type: object
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    TargetType:
+      type: string
+      enum:
+        - ec2_instance
+        - ecs_service
+        - rds_instance
+        - lambda_function
+        - gce_instance
+        - cloudsql_instance
+        - gke_node
+      description: Target type
+
+    TargetStatus:
+      type: string
+      enum:
+        - active
+        - inactive
+        - unknown
+      description: Target status
+
+    Provider:
+      type: string
+      enum:
+        - aws
+        - gcp
+        - azure
+        - kubernetes
+        - vmware
+      description: Infrastructure provider
+
+    Execution:
+      type: object
+      required:
+        - id
+        - experiment_id
+        - status
+        - started_at
+        - trigger_type
+        - trigger_by
+      properties:
+        id:
+          type: string
+          format: uuid
+        experiment_id:
+          type: string
+          format: uuid
+        status:
+          $ref: '#/components/schemas/ExecutionStatus'
+        started_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+        duration:
+          type: string
+          description: Execution duration
+        trigger_type:
+          type: string
+          enum: [manual, scheduled, api, webhook]
+        trigger_by:
+          type: string
+          description: Trigger identifier
+        parameters:
+          type: object
+        metadata:
+          type: object
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        version:
+          type: integer
+
+    ExecutionStatus:
+      type: string
+      enum:
+        - pending
+        - running
+        - succeeded
+        - failed
+        - cancelled
+        - timeout
+      description: Execution status
+
+    # Request/Response schemas
+    CreateExperimentRequest:
+      type: object
+      required:
+        - name
+        - config
+        - safety
+        - targets
+      properties:
+        name:
+          type: string
+          maxLength: 255
+        description:
+          type: string
+        config:
+          $ref: '#/components/schemas/ExperimentConfig'
+        safety:
+          $ref: '#/components/schemas/SafetyConfig'
+        targets:
+          type: array
+          items:
+            $ref: '#/components/schemas/Target'
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+
+    UpdateExperimentRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 255
+        description:
+          type: string
+        config:
+          $ref: '#/components/schemas/ExperimentConfig'
+        safety:
+          $ref: '#/components/schemas/SafetyConfig'
+        targets:
+          type: array
+          items:
+            $ref: '#/components/schemas/Target'
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+
+    ExecuteExperimentRequest:
+      type: object
+      properties:
+        dry_run:
+          type: boolean
+          default: false
+        parameters:
+          type: object
+        trigger_by:
+          type: string
+
+    ValidationResult:
+      type: object
+      required:
+        - valid
+        - message
+      properties:
+        valid:
+          type: boolean
+        message:
+          type: string
+        errors:
+          type: array
+          items:
+            type: string
+        warnings:
+          type: array
+          items:
+            type: string
+
+    DiscoverTargetsRequest:
+      type: object
+      required:
+        - provider
+      properties:
+        provider:
+          $ref: '#/components/schemas/Provider'
+        region:
+          type: string
+        filters:
+          type: object
+          additionalProperties:
+            type: string
+
+    DiscoverTargetsResponse:
+      type: object
+      properties:
+        targets:
+          type: array
+          items:
+            $ref: '#/components/schemas/Target'
+        total:
+          type: integer
+
+    # List response schemas
+    ExperimentListResponse:
+      type: object
+      properties:
+        experiments:
+          type: array
+          items:
+            $ref: '#/components/schemas/Experiment'
+        pagination:
+          $ref: '#/components/schemas/PaginationInfo'
+
+    ExecutionListResponse:
+      type: object
+      properties:
+        executions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Execution'
+        pagination:
+          $ref: '#/components/schemas/PaginationInfo'
+
+    TargetListResponse:
+      type: object
+      properties:
+        targets:
+          type: array
+          items:
+            $ref: '#/components/schemas/Target'
+        pagination:
+          $ref: '#/components/schemas/PaginationInfo'
+
+    PaginationInfo:
+      type: object
+      properties:
+        page:
+          type: integer
+        page_size:
+          type: integer
+        total:
+          type: integer
+        total_pages:
+          type: integer
+
+    # Health schemas
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [healthy, unhealthy]
+        timestamp:
+          type: string
+          format: date-time
+        version:
+          type: string
+        checks:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/HealthCheck'
+
+    HealthCheck:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [healthy, unhealthy]
+        message:
+          type: string
+        duration:
+          type: string
+
+    ReadinessResponse:
+      type: object
+      properties:
+        ready:
+          type: boolean
+        timestamp:
+          type: string
+          format: date-time
+
+    LogResponse:
+      type: object
+      properties:
+        logs:
+          type: array
+          items:
+            $ref: '#/components/schemas/LogEntry'
+        total:
+          type: integer
+
+    LogEntry:
+      type: object
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        level:
+          type: string
+          enum: [debug, info, warn, error]
+        message:
+          type: string
+        source:
+          type: string
+        metadata:
+          type: object
+
+    # Error schemas
+    Error:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+          description: Error code
+        message:
+          type: string
+          description: Error message
+        details:
+          type: string
+          description: Error details
+        timestamp:
+          type: string
+          format: date-time
+        request_id:
+          type: string
+          description: Request tracking ID
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Unauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Forbidden:
+      description: Forbidden
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Conflict:
+      description: Resource conflict
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    InternalServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+security:
+  - BearerAuth: []
+
+tags:
+  - name: Experiments
+    description: Chaos experiment management
+  - name: Executions
+    description: Experiment execution management
+  - name: Targets
+    description: Infrastructure target management
+  - name: Health
+    description: Service health and readiness checks
